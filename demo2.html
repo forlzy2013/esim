@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find the best data eSIM in Japan</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Find the best data eSIM in Japan</h1>
+            <p class="subtitle">Compare prepaid eSIM data plans for your next trip to Japan. Get the most data, texts and calls at the best price. Never hassle again buying a physical sim card.</p>
+        </header>
+        <div class="content">
+            <div class="sidebar">
+                <div class="filter-section">
+                    <h3>Sort by</h3>
+                    <div class="radio-group">
+                        <label><input type="radio" name="sort" value="most-data" checked> Most data</label>
+                        <label><input type="radio" name="sort" value="cheapest"> Cheapest</label>
+                        <label><input type="radio" name="sort" value="least-data"> Least data</label>
+                        <label><input type="radio" name="sort" value="lowest-price-gb"> Lowest Price/GB</label>
+                    </div>
+                </div>
+                <div class="filter-section">
+                    <h3>Plan size</h3>
+                    <select id="min-gb">
+                        <option value="5">min 5 GB</option>
+                        <option value="10">min 10 GB</option>
+                        <option value="20">min 20 GB</option>
+                    </select>
+                    <select id="max-gb">
+                        <option value="30">max 30 GB</option>
+                        <option value="50">max 50 GB</option>
+                        <option value="100">max 100 GB</option>
+                    </select>
+                </div>
+                <div class="filter-section">
+                    <h3>Plan duration</h3>
+                    <select id="min-days">
+                        <option value="1">min 1 day</option>
+                        <option value="7">min 7 days</option>
+                        <option value="30">min 30 days</option>
+                    </select>
+                    <select id="max-days">
+                        <option value="0">No expiration</option>
+                        <option value="30">max 30 days</option>
+                        <option value="90">max 90 days</option>
+                    </select>
+                </div>
+                <div class="filter-section">
+                    <h3>Plan options</h3>
+                    <label><input type="checkbox" id="voice-sms"> Show only plans with voice/SMS</label>
+                </div>
+            </div>
+            <div class="main-content">
+                <div id="result-count"></div>
+                <div id="plan-list">
+                    <!-- Plan cards will be dynamically inserted here -->
+                </div>
+                <div id="pagination" class="pagination">
+                    <!-- Pagination buttons will be dynamically inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+   
+    <script>
+       let currentPage = 1;
+        const plansPerPage = 10;
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        async function fetchPlans(params) {
+            showLoading();
+            const queryString = new URLSearchParams(params).toString();
+            try {
+                const response = await fetch(`http://localhost:3000/api/plans?${queryString}`);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                console.log('Fetched data:', data);
+                return data;
+            } catch (error) {
+                console.error('Error fetching plans:', error);
+                document.getElementById('result-count').textContent = 'Error fetching plans. Please try again.';
+                return { plans: [], totalCount: 0 };
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function renderPlans(plans) {
+            const planList = document.getElementById('plan-list');
+            planList.innerHTML = '';
+            if (!Array.isArray(plans) || plans.length === 0) {
+                planList.innerHTML = '<p>No plans found matching your criteria.</p>';
+                return;
+            }
+            plans.forEach(plan => {
+                const planCard = document.createElement('div');
+                planCard.className = 'plan-card';
+                planCard.innerHTML = `
+                    <div class="plan-details">
+                        <div class="plan-data">
+                            <h3>${plan.size} GB</h3>
+                            <p>${plan.validity} day(s)</p>
+                        </div>
+                        <div class="plan-price">
+                            <h3>$${plan.price.toFixed(2)}</h3>
+                            <p>$${plan.pricePerGB.toFixed(2)}/GB</p>
+                        </div>
+                    </div>
+                    <div class="plan-info">
+                        <p>Provider: ${plan.provider}</p>
+                        <p>${plan.hasVoiceSMS ? 'Data + Voice/SMS' : 'Data only'}</p>
+                        <p>Network(s): ${plan.network}</p>
+                    </div>
+                    <a href="#" class="learn-more" onclick="openPlanDetails(${plan.id})">Learn more ›</a>
+                `;
+                planList.appendChild(planCard);
+            });
+        }
+
+        function renderPagination(totalCount) {
+            const totalPages = Math.ceil(totalCount / plansPerPage);
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (currentPage > 1) {
+                const prevButton = createPaginationButton('Previous', () => {
+                    currentPage--;
+                    filterAndSortPlans();
+                });
+                pagination.appendChild(prevButton);
+            }
+
+            for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+                const button = createPaginationButton(i, () => {
+                    currentPage = i;
+                    filterAndSortPlans();
+                });
+                if (i === currentPage) {
+                    button.classList.add('active');
+                }
+                pagination.appendChild(button);
+            }
+
+            if (currentPage < totalPages) {
+                const nextButton = createPaginationButton('Next', () => {
+                    currentPage++;
+                    filterAndSortPlans();
+                });
+                pagination.appendChild(nextButton);
+            }
+        }
+
+        function createPaginationButton(text, onClick) {
+            const button = document.createElement('button');
+            button.textContent = text;
+            button.onclick = onClick;
+            return button;
+        }
+
+        async function filterAndSortPlans() {
+            const minGB = document.getElementById('min-gb').value;
+            const maxGB = document.getElementById('max-gb').value;
+            const minDays = document.getElementById('min-days').value;
+            const maxDays = document.getElementById('max-days').value;
+            const voiceSMS = document.getElementById('voice-sms').checked;
+            const sortBy = document.querySelector('input[name="sort"]:checked').value;
+
+            const params = {
+                country: 'jp',
+                minGB,
+                maxGB,
+                minDays,
+                maxDays: maxDays === '0' ? '' : maxDays,
+                hasVoiceSMS: voiceSMS,
+                sortBy,
+                page: currentPage,
+                limit: plansPerPage
+            };
+
+            console.log('Fetching plans with params:', params);
+            const { plans, totalCount } = await fetchPlans(params);
+            console.log('Received plans:', plans);
+            console.log('Total count:', totalCount);
+
+            renderPlans(plans);
+            renderPagination(totalCount);
+            document.getElementById('result-count').textContent = `${totalCount} result(s)`;
+        }
+
+        function openPlanDetails(planId) {
+            console.log(`Opening details for plan ${planId}`);
+            // 实现显示详细计划信息的功能
+        }
+
+        function showLoading() {
+            loadingOverlay.style.visibility = 'visible';
+        }
+
+        function hideLoading() {
+            loadingOverlay.style.visibility = 'hidden';
+        }
+
+        // 设置事件监听器
+        document.querySelectorAll('select, input[type="checkbox"], input[type="radio"]').forEach(input => {
+            input.addEventListener('change', () => {
+                currentPage = 1; // 当过滤器改变时重置到第一页
+                filterAndSortPlans();
+            });
+        });
+
+        // 页面加载时初始渲染
+        document.addEventListener('DOMContentLoaded', () => {
+            filterAndSortPlans();
+        });
+    </script>
+</body>
+</html>
